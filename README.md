@@ -336,7 +336,8 @@ docker compose down -v
 
 El servicio en la nube queda en ejecución; en el plan gratuito se suspende
 tras 15 minutos sin tráfico y despierta con la siguiente petición (tarda
-alrededor de un minuto).
+uno o dos minutos). Antes de la clase, abran la URL pública para que el
+servicio ya esté despierto.
 
 ## Instalación y configuración
 
@@ -691,7 +692,12 @@ orden:
    base gestionada estaba vacía y ahora tiene las mismas tablas y datos
    semilla que la local.
 4. `Tomcat started on port 10000`, `Started DemoApplication` y, de la
-   plataforma, `==> Your service is live`.
+   plataforma, `==> Your service is live` y
+   `==> Available at your primary URL https://eif509-demo-sesion12.onrender.com`.
+   En la instancia gratuita (0.1 CPU) el arranque tarda alrededor de dos
+   minutos; mientras tanto la plataforma repite
+   `==> No open ports detected, continuing to scan...`, lo cual es normal
+   hasta que Tomcat abre el puerto.
 
 **Qué observar**: si algo falla, este es el primer lugar donde se busca la
 causa (paso 9). La tabla de
@@ -711,8 +717,8 @@ API=https://eif509-demo-sesion12.onrender.com
 curl -i $API/api/v1/productos
 ```
 
-Salida esperada: `HTTP/2 401` (la plataforma atiende en HTTP/2) y el mismo
-Problem Details del paso 8. Inicien sesión y consulten con el token:
+Salida esperada: `HTTP/2 401` (la plataforma atiende en HTTP/2 y agrega
+`strict-transport-security`) y el mismo Problem Details del paso 8. Inicien sesión y consulten con el token:
 
 ```bash
 TOKEN=$(curl -s -X POST $API/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
@@ -725,8 +731,9 @@ Salida esperada: la primera página del catálogo. En Swagger UI, ejecuten
 
 **Qué observar**: el token funciona igual que en local porque el flujo es
 el mismo; lo único distinto es el secreto con el que se firmó. Si la
-primera respuesta tarda alrededor de un minuto, el plan gratuito había
-suspendido el servicio por inactividad; las siguientes son normales. Las
+primera respuesta tarda uno o dos minutos, el plan gratuito había
+suspendido el servicio por inactividad y la aplicación está arrancando de
+nuevo; las siguientes son normales. Las
 mismas peticiones están en [`peticiones/nube.http`](peticiones/nube.http):
 cambien el valor de `@host`.
 
@@ -821,9 +828,9 @@ con cero.
 | `URL must start with 'jdbc'` | `DATABASE_URL` falta o tiene el formato `postgres://` | Convertirla al formato JDBC (paso 11) con usuario y clave en variables separadas |
 | `Connection to host:5432 refused` o `password authentication failed` | Host, usuario o clave incorrectos, o la base en otra región | Copiar de nuevo los valores de la pestaña **Info**; usar la misma región |
 | La construcción falla con `Permission denied` en `gradlew` | El archivo perdió el permiso de ejecución en Git | `git update-index --chmod=+x gradlew`, commit y push; o agregar `RUN chmod +x ./gradlew` antes de compilar en el `Dockerfile` |
-| La plataforma reporta `No open ports detected` o responde 502 | La aplicación no escucha en el puerto de `PORT` | Verificar `server.port: ${PORT:8080}` en `application.yml` |
+| La plataforma reporta `No open ports detected` o responde 502 | La aplicación todavía está arrancando (normal durante unos dos minutos en la instancia gratuita) o no escucha en el puerto de `PORT` | Esperar a `Tomcat started on port 10000`; si nunca aparece, verificar `server.port: ${PORT:8080}` en `application.yml` |
 | Flyway falla al migrar (`Migration V... failed`) | Un script con error, o una base que quedó a medias | Leer el script y la línea en el mensaje; en la demostración, recrear la base vacía |
-| La primera respuesta tarda alrededor de un minuto | El plan gratuito suspendió el servicio por inactividad | Es esperable; las siguientes respuestas son normales |
+| La primera respuesta tarda uno o dos minutos | El plan gratuito suspendió el servicio por inactividad | Es esperable; las siguientes respuestas son normales |
 | Los tokens dejan de funcionar tras un despliegue | `JWT_SECRETO` cambió entre despliegues | Mantener el secreto estable en la plataforma |
 | La SPA no recibe datos | `CORS_ORIGEN` no coincide con la URL real de la SPA, o `VITE_API_URL` es incorrecta | Revisar la consola del navegador y ambas variables |
 | `docker build` falla por falta de espacio o memoria | Imágenes antiguas acumuladas | `docker system prune` y reintentar |
