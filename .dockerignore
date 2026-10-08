@@ -1,0 +1,8 @@
+# Lo que no entra en la imagen: resultados de compilaciones anteriores, el
+# historial de Git y la SPA, que se publica aparte como sitio estático.
+.git
+.gradle
+build
+spa
+peticiones
+*.md
