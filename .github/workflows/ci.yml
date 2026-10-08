@@ -37,3 +37,13 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  # El artefacto de despliegue: la imagen de contenedor del Dockerfile.
+  # La construye con los mismos pasos que usará la plataforma, para que un
+  # Dockerfile roto se detecte aquí y no en el despliegue.
+  imagen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen
+        run: docker build -t eif509-demo-sesion12 .
