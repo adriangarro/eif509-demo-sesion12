@@ -1,13 +1,14 @@
-# EIF509 · Demo Sesión 11 — Autenticación con JWT en la API y SPA en React
+# EIF509 · Demo Sesión 12 — Despliegue de la API en la nube
 
 Repositorio de demostración del curso **EIF509 «Desarrollo de Aplicaciones
 Basadas en Web»** (Universidad Nacional, Costa Rica).
 
 Esta demo continúa el proyecto de la
-[Sesión 10 (MVC y Thymeleaf)](https://github.com/adriangarro/eif509-demo-sesion10).
-Protege la API con **tokens JWT y roles**, y agrega un **segundo frontend**:
-una aplicación de una sola página (SPA) en **React** que consume la misma
-API. Las demos anteriores de la serie son:
+[Sesión 11 (JWT y SPA en React)](https://github.com/adriangarro/eif509-demo-sesion11).
+Prepara la API para una **plataforma como servicio** y la publica en internet
+con una base de datos PostgreSQL gestionada, **perfiles de configuración** y
+**secretos** definidos únicamente en la plataforma. Las demos anteriores de
+la serie son:
 [Sesión 3](https://github.com/adriangarro/eif509-demo-sesion3) ·
 [Sesión 4](https://github.com/adriangarro/eif509-demo-sesion4) ·
 [Sesión 5](https://github.com/adriangarro/eif509-demo-sesion5) ·
@@ -15,43 +16,71 @@ API. Las demos anteriores de la serie son:
 [Sesión 7](https://github.com/adriangarro/eif509-demo-sesion7) ·
 [Sesión 8](https://github.com/adriangarro/eif509-demo-sesion8) ·
 [Sesión 9](https://github.com/adriangarro/eif509-demo-sesion9) ·
-[Sesión 10](https://github.com/adriangarro/eif509-demo-sesion10).
+[Sesión 10](https://github.com/adriangarro/eif509-demo-sesion10) ·
+[Sesión 11](https://github.com/adriangarro/eif509-demo-sesion11).
 
 ## ¿Qué van a construir?
 
-**Demostración 1 · Proteger la API con JWT y roles**
+**Parte 1 · El artefacto y la configuración, en su computadora**
 
-1. La API sin seguridad responde a cualquiera (rama `inicio`).
-2. Con la configuración de seguridad, una petición sin token recibe **401**.
-3. `POST /auth/login` emite un token firmado; su contenido se lee en
-   [jwt.io](https://jwt.io).
-4. Con el token en la cabecera `Authorization: Bearer <token>`, la respuesta
-   es **200**.
-5. Un usuario con rol `CLIENTE` intenta crear un producto: **403**.
-6. Un cliente intenta consultar el pedido de otro cliente: **403**
-   (propiedad del recurso).
-7. Las pruebas automáticas verifican 401, 403 y 200.
+1. Un `Dockerfile` en dos etapas: compila con el JDK y ejecuta el JAR con un
+   JRE más liviano.
+2. La configuración separada en perfiles: `application.yml` (común),
+   `application-dev.yml` (Docker Compose) y `application-prod.yml` (la nube).
+   Ningún archivo contiene un valor secreto: solo nombres de variables.
+3. El puerto se lee de la variable `PORT`, como exige la plataforma.
+4. La imagen se construye y se ejecuta **igual que lo hará la plataforma**:
+   perfil `prod`, variables de entorno y un puerto asignado. Flyway aplica las
+   migraciones y la API responde.
+5. Qué pasa cuando falta una variable: el error aparece en los registros de
+   arranque.
 
-**Demostración 2 · Una SPA en React que consume la API**
+**Parte 2 · Despliegue en la plataforma como servicio**
 
-1. Pantalla de inicio de sesión contra `POST /auth/login`.
-2. Un módulo cliente (`api.js`) que agrega el token a cada petición y
-   maneja el 401 en un solo lugar.
-3. Listado paginado de productos con sus tres estados: cargando, datos y
-   error.
-4. El error de CORS en la consola del navegador y su corrección en Spring.
+1. Crear una base PostgreSQL gestionada y convertir su URL al formato JDBC.
+2. Crear el servicio web conectado al repositorio de GitHub (rama `main`,
+   construcción con el `Dockerfile`).
+3. Configurar las variables de entorno con un secreto JWT nuevo, distinto al
+   de desarrollo.
+4. Seguir los registros de construcción y de arranque.
+5. Abrir la URL pública: Swagger UI, `POST /auth/login` y un `GET` protegido.
+6. Un `push` a `main` genera un despliegue automático.
 
-### Quién responde qué
+La plataforma de referencia es [Render](https://render.com) (los pasos son
+equivalentes en Railway u otra plataforma que construya a partir de un
+`Dockerfile`). El código de la API no cambia respecto a la Sesión 11: todo
+lo que se agrega es configuración.
 
-| Situación | Quién la detecta | Respuesta |
+### Cómo queda el sistema desplegado
+
+```text
+          push a main                     construye el Dockerfile
+ GitHub  ───────────────►  Plataforma  ──────────────────────────►  Servicio web (la API)
+ (código, sin secretos)    (integración continua: pruebas)          https://<nombre>.onrender.com
+                                                                     SPRING_PROFILES_ACTIVE=prod
+                                                                     JWT_SECRETO, CORS_ORIGEN, PORT
+                                                                        │ DATABASE_URL / USER / PASSWORD
+                                                                        ▼
+ Navegador ──► Sitio estático (la SPA) ──── CORS ────► API        PostgreSQL gestionado
+               VITE_API_URL=https://<api>                         (Flyway aplica V1..V7 al arrancar)
+```
+
+Cada variable se configura en **un solo lugar**: la sección de variables de
+entorno del servicio en la plataforma. El repositorio y su historial no
+contienen ningún valor.
+
+### Variables de entorno (lámina 14)
+
+| Variable | Ejemplo | Para qué se usa |
 |---|---|---|
-| No se envía token, o es inválido o está vencido | Filtro de seguridad | 401 Unauthorized |
-| El rol no permite usar la ruta | Reglas de `SeguridadConfig` | 403 Forbidden |
-| El recurso pertenece a otro usuario | `PedidoService` | 403 Forbidden |
-| Correo o clave incorrectos al iniciar sesión | `AuthController` y `ManejadorErrores` | 401 Unauthorized |
-
-Todas las respuestas de error usan el formato Problem Details (RFC 9457) de
-la Sesión 9, incluidas las de 401 y 403.
+| `SPRING_PROFILES_ACTIVE` | `prod` | Activa `application-prod.yml` |
+| `DATABASE_URL` | `jdbc:postgresql://host:5432/eif509` | Conexión a PostgreSQL (formato JDBC) |
+| `DATABASE_USER` / `DATABASE_PASSWORD` | Los entrega la plataforma | Credenciales de PostgreSQL |
+| `JWT_SECRETO` | 32 o más caracteres aleatorios | Firma y verificación de los tokens |
+| `CORS_ORIGEN` | `https://eif509-spa.onrender.com` | Origen autorizado para la SPA |
+| `PORT` | Lo asigna la plataforma (en Render, `10000`) | Puerto en el que escucha la API |
+| `MONGODB_URI` | `mongodb+srv://usuario:clave@cluster/...` | Solo si el proyecto usa MongoDB (este repositorio no) |
+| `VITE_API_URL` (en la SPA) | `https://eif509-demo-sesion12.onrender.com` | URL de la API al construir la SPA |
 
 ## Requisitos previos
 
@@ -59,95 +88,73 @@ la Sesión 9, incluidas las de 401 y 403.
 |---|---|---|---|
 | Docker Desktop | 4.x | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | `docker --version` |
 | JDK (Java) | 21 | [adoptium.net](https://adoptium.net/) | `java -version` |
-| Node.js (para la SPA) | 20 | [nodejs.org](https://nodejs.org/) | `node --version` |
 | Git | 2.30 | [git-scm.com/downloads](https://git-scm.com/downloads) | `git --version` |
 | Un cliente HTTP | — | `curl` viene con macOS, Linux y Windows 10+ | `curl --version` |
+| Cuenta en GitHub | — | [github.com](https://github.com) | Con el repositorio de su proyecto |
+| Cuenta en la plataforma | — | [render.com](https://render.com) (iniciar sesión con GitHub) | Para la Parte 2 |
 
-Las peticiones de la Demostración 1 también están en
-[`peticiones/seguridad.http`](peticiones/seguridad.http), para el cliente
-HTTP de IntelliJ IDEA o la extensión *REST Client* de VS Code. Las notas por
-sistema operativo (WSL2 en Windows, el `JAVA_HOME` de Homebrew en macOS)
-están en el
-[README de la Sesión 5](https://github.com/adriangarro/eif509-demo-sesion5#requisitos-previos).
-En macOS con Homebrew, en cada terminal que usen:
+Node.js solo hace falta para ejecutar la SPA en local (Sesión 11). Las
+peticiones contra la URL pública también están en
+[`peticiones/nube.http`](peticiones/nube.http), para el cliente HTTP de
+IntelliJ IDEA o la extensión *REST Client* de VS Code. En macOS con
+Homebrew, en cada terminal que usen:
 
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 ```
 
-## Las dos ramas
-
-| Rama | Contenido | Uso |
-|---|---|---|
-| `inicio` | El proyecto de la Sesión 10: la API responde sin credenciales | Punto de partida de la Demostración 1 |
-| `main` | La versión completa: JWT, roles, propiedad del recurso, CORS y la SPA | Todo lo demás; respaldo si algo falla en vivo |
+Este repositorio tiene una sola rama, `main`: la versión lista para
+desplegar.
 
 ## Usuarios de demostración
 
 La migración `V7__usuarios.sql` crea dos usuarios, con la clave guardada
-con BCrypt (nunca en texto plano):
+con BCrypt. Son los mismos en local y en la nube, porque Flyway aplica las
+mismas migraciones sobre la base gestionada:
 
 | Correo | Clave | Rol | Puede |
 |---|---|---|---|
 | `admin@demo.cr` | `admin123` | `ADMIN` | Todo: crear productos y ver cualquier pedido |
 | `cliente@demo.cr` | `cliente123` | `CLIENTE` | Leer el catálogo y ver solo sus propios pedidos |
 
-`cliente@demo.cr` es la clienta Ana Rojas de los datos semilla: los pedidos
-1, 2, 6 y 9 son suyos; el pedido 3, por ejemplo, es de Luis Mora.
-
-`admin@demo.cr` también inicia sesión en el módulo administrativo de la
-Sesión 10 (`/admin/productos`): ambas presentaciones usan la misma tabla de
-usuarios.
-
 ## Estructura del proyecto
 
-Lo nuevo respecto a la Sesión 10 está marcado con `←`:
+Lo nuevo respecto a la Sesión 11 está marcado con `←`:
 
 ```text
-├── build.gradle                                   ← spring-boot-starter-oauth2-resource-server
-├── peticiones/seguridad.http                      ← peticiones de la Demostración 1
-├── spa/                                           ← la SPA en React (Vite)
-│   └── src/
-│       ├── api.js                                 ← un solo lugar para hablar con la API
-│       ├── sesion.js                              ← dónde se guarda el token
-│       ├── Login.jsx                              ← inicio de sesión
-│       ├── ProductoLista.jsx                      ← listado paginado: cargando, datos y error
-│       ├── ProductoNuevo.jsx                      ← crear producto (muestra el 403 del CLIENTE)
-│       └── App.jsx                                ← sin token: inicio de sesión; con token: catálogo
-└── src/
-    ├── main/resources/
-    │   ├── application.properties                 ← jwt.secreto=${JWT_SECRETO}, cors.origenes
-    │   ├── application-sin-cors.properties        ← perfil para mostrar el error de CORS
-    │   └── db/migration/V7__usuarios.sql          ← usuarios con rol y clave BCrypt
-    ├── main/java/cr/una/eif509/demo/
-    │   ├── config/SeguridadConfig.java            ← paso 1: clave, filtro JWT, roles y CORS
-    │   ├── config/RespuestasDeSeguridad.java      ← 401 y 403 en formato Problem Details
-    │   ├── seguridad/TokenService.java            ← paso 2: emisión del token
-    │   ├── api/AuthController.java                ← POST /auth/login
-    │   ├── service/PedidoService.java             ← paso 3: verificación de propiedad
-    │   └── seguridad/UsuarioActual.java           ← el usuario del token, para el servicio
-    └── test/java/cr/una/eif509/demo/
-        ├── api/SeguridadApiTest.java              ← paso 4: pruebas de 401, 403 y 200 (sin base)
-        └── seguridad/AutenticacionIT.java         ← tokens reales contra PostgreSQL, y CORS
+├── Dockerfile                                     ← la imagen en dos etapas (lámina 8)
+├── .dockerignore                                  ← lo que no entra en la imagen
+├── .github/workflows/ci.yml                       ← nuevo trabajo: construir la imagen
+├── docker-compose.yml                                PostgreSQL para el perfil dev
+├── peticiones/nube.http                           ← peticiones contra la URL pública
+├── spa/                                              la SPA en React (Sesión 11)
+└── src/main/resources/
+    ├── application.yml                            ← común: server.port=${PORT:8080}, ${JWT_SECRETO}, ${CORS_ORIGEN}
+    ├── application-dev.yml                        ← la base del docker-compose.yml
+    ├── application-prod.yml                       ← ${DATABASE_URL}, ${DATABASE_USER}, ${DATABASE_PASSWORD}
+    ├── application-sin-cors.yml                      perfil de la demostración de CORS (Sesión 11)
+    ├── application-sin-manejador.yml                 perfil de la demostración de errores (Sesión 9)
+    └── db/migration/V1..V7                           las migraciones que Flyway aplica en la nube
 ```
 
 ## Las demostraciones paso a paso
 
-Sigan estos pasos en orden para ejecutar las dos demostraciones; cada uno
-tiene el comando listo para copiar. La explicación de cada paso está en las
+Sigan estos pasos en orden para ejecutar las dos partes; cada uno tiene el
+comando listo para copiar. La explicación de cada paso está en las
 secciones detalladas más abajo: el número entre paréntesis indica dónde.
 
 ### Antes de empezar
 
-Abran Docker Desktop y esperen a que termine de iniciar. Abran dos
-terminales en la carpeta del repositorio clonado:
+Abran Docker Desktop y esperen a que termine de iniciar. Inicien sesión en
+[dashboard.render.com](https://dashboard.render.com) con su cuenta de
+GitHub. Abran dos terminales en la carpeta del repositorio clonado:
 
 ```bash
-git clone https://github.com/adriangarro/eif509-demo-sesion11.git
+git clone https://github.com/adriangarro/eif509-demo-sesion12.git
 ```
 
 ```bash
-cd eif509-demo-sesion11
+cd eif509-demo-sesion12
 ```
 
 En macOS con Homebrew, ejecuten en ambas terminales:
@@ -158,221 +165,186 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 
 ### Ejemplo: comandos en la computadora del profesor (macOS)
 
-Con el repositorio en `~/Documents/Claude/eif509-demo-sesion11`, los
-comandos que cambian respecto a esta sección quedan así, listos para copiar. Los
-demás pasos son idénticos.
+Con el repositorio en `~/Documents/Claude/eif509-demo-sesion12`, los
+comandos que cambian respecto a esta sección quedan así, listos para copiar.
+Los demás pasos son idénticos.
 
-Paso 1, en la terminal 1:
+Paso 2, en la terminal 1:
 
 ```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && cd ~/Documents/Claude/eif509-demo-sesion11 && docker compose down -v && docker compose up -d && git switch inicio && ./gradlew bootRun
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home && cd ~/Documents/Claude/eif509-demo-sesion12 && docker compose down -v && docker compose up -d && docker build -t eif509-demo-sesion12 .
 ```
 
-Paso 1, en la terminal 2:
+Paso 3, en la terminal 1:
 
 ```bash
-cd ~/Documents/Claude/eif509-demo-sesion11 && curl -i http://localhost:8080/api/v1/productos
+docker run --rm --name api-prod -p 10000:10000 -e PORT=10000 -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev -e JWT_SECRETO=$(openssl rand -base64 48) -e CORS_ORIGEN=https://eif509-spa.onrender.com eif509-demo-sesion12
 ```
 
-Paso 2, en la terminal 1 (después de `Ctrl+C`):
+Paso 4, en la terminal 2:
 
 ```bash
-git switch main && export JWT_SECRETO=$(openssl rand -base64 48) && ./gradlew bootRun
+cd ~/Documents/Claude/eif509-demo-sesion12 && curl -i http://localhost:10000/api/v1/productos
 ```
 
-Paso 9, en la terminal 2:
+Paso 8, en la terminal 2 (el secreto nuevo para la plataforma):
 
 ```bash
-cd ~/Documents/Claude/eif509-demo-sesion11/spa && npm install && npm run dev
+openssl rand -base64 48
 ```
 
 Al terminar:
 
 ```bash
-cd ~/Documents/Claude/eif509-demo-sesion11 && docker compose down -v
+cd ~/Documents/Claude/eif509-demo-sesion12 && docker compose down -v
 ```
 
-### Demostración 1 · JWT y roles
+### Parte 1 · El artefacto en su computadora
 
-**1. La API sin seguridad (paso 5).** En la terminal 1:
+**1. Revisar los archivos (paso 5).** Abran `Dockerfile`,
+`src/main/resources/application.yml` y `application-prod.yml`. Qué
+observar: dos etapas en la imagen, `server.port: ${PORT:8080}` y ningún
+valor secreto, solo `${NOMBRE}`.
+
+**2. Construir la imagen (paso 6).** En la terminal 1:
 
 ```bash
-docker compose down -v && docker compose up -d && git switch inicio && ./gradlew bootRun
+docker compose down -v && docker compose up -d && docker build -t eif509-demo-sesion12 .
 ```
 
-En la terminal 2:
+Tarda unos minutos la primera vez (descarga Gradle y las dependencias).
+
+**3. Ejecutar la imagen como lo hará la plataforma (paso 7).** En la
+terminal 1:
 
 ```bash
-curl -i http://localhost:8080/api/v1/productos
+docker run --rm --name api-prod -p 10000:10000 -e PORT=10000 -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev -e JWT_SECRETO=$(openssl rand -base64 48) -e CORS_ORIGEN=https://eif509-spa.onrender.com eif509-demo-sesion12
 ```
 
-Responde 200 sin credenciales.
+Qué observar en los registros: `profile is active: "prod"`,
+`Successfully applied 7 migrations` y `Tomcat started on port 10000`.
 
-**2. Activar la seguridad (pasos 6 y 7).** En la terminal 1, presionen
-`Ctrl+C` y ejecuten:
+**4. Probar la API (paso 8).** En la terminal 2:
 
 ```bash
-git switch main && export JWT_SECRETO=$(openssl rand -base64 48) && ./gradlew bootRun
+curl -i http://localhost:10000/api/v1/productos
 ```
 
-**3. Sin token, 401 (paso 8).** En la terminal 2:
+Responde 401. Inicien sesión y repitan con el token:
 
 ```bash
-curl -i http://localhost:8080/api/v1/productos
-```
-
-**4. Iniciar sesión y ver el token en jwt.io (paso 9).**
-
-```bash
-curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}'
-```
-
-La respuesta trae el token, un texto largo de tres partes separadas por
-puntos (`eyJhbGciOiJIUzI1NiJ9.eyJpc3Mi...`). Para verlo en jwt.io:
-
-1. Copien el valor de `token`, sin las comillas.
-2. Abran [https://jwt.io](https://jwt.io). En la pestaña **JWT Decoder**,
-   pulsen **Clear** en el recuadro **Encoded Token** (trae un token de
-   ejemplo) y peguen el suyo.
-3. Debajo del token aparecen **Valid JWT** e **Invalid Signature**. El
-   token está bien formado; la firma aparece como inválida porque jwt.io
-   la compara con su propio secreto de ejemplo.
-4. A la derecha, **Decoded Header** muestra `{"alg": "HS256"}`, el
-   algoritmo de la firma, y **Decoded Payload** muestra el contenido:
-
-   ```json
-   {
-     "iss": "eif509",
-     "sub": "admin@demo.cr",
-     "exp": 1790907558,
-     "iat": 1790903958,
-     "roles": ["ADMIN"]
-   }
-   ```
-
-   `sub` es quién es el usuario, `roles` lo que puede hacer, `iat` cuándo
-   se emitió y `exp` hasta cuándo vale (una hora después). Los números son
-   segundos desde 1970 y cambian en cada inicio de sesión.
-
-Cualquiera puede leer el contenido de un token; lo que no puede hacer es
-modificarlo sin invalidar la firma. Por eso un token nunca lleva datos
-sensibles.
-
-*(Opcional)* Para mostrar que la firma depende del secreto, péguenlo en
-el campo **Secret** de la sección **JWT Signature Verification**, con la
-opción **BASE64URL ENCODED** desactivada: el mensaje cambia a **Signature
-Verified**. Como la terminal 1 queda ocupada por la API, el secreto se
-copia en el paso 2: después del `export` y antes de `./gradlew bootRun`,
-ejecuten `echo "$JWT_SECRETO"`. Esto se hace solo con el secreto
-de una demostración: un secreto real nunca se pega en un sitio externo.
-
-Guarden el token en una variable para los pasos siguientes:
-
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
-```
-
-Si no hay acceso a internet, el contenido también se puede leer en la
-terminal:
-
-```bash
-echo "$TOKEN" | python3 -c "import sys,base64,json; p=sys.stdin.read().split('.')[1]; print(json.dumps(json.loads(base64.urlsafe_b64decode(p+'='*(-len(p)%4))), indent=2))"
-```
-
-**5. Con token, 200 (paso 10):**
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/productos
-```
-
-**6. Rol CLIENTE, 403 (paso 11):**
-
-```bash
-TOKEN_CLIENTE=$(curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "cliente@demo.cr", "clave": "cliente123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
+TOKEN=$(curl -s -X POST http://localhost:10000/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
 ```
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/productos -H "Authorization: Bearer $TOKEN_CLIENTE" -H 'Content-Type: application/json' -d '{"nombre": "Producto del cliente", "precio": 1, "disponible": 1}'
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:10000/api/v1/productos
 ```
 
-**7. Propiedad del recurso (paso 12).** El pedido 1 es de la clienta y
-responde 200:
+Responde 200. Swagger UI está en `http://localhost:10000/swagger-ui.html`.
+
+**5. Qué pasa si falta una variable (paso 9).** En la terminal 1,
+presionen `Ctrl+C` y ejecuten:
 
 ```bash
-curl -s -o /dev/null -w "pedido 1 -> %{http_code}\n" -H "Authorization: Bearer $TOKEN_CLIENTE" http://localhost:8080/api/v1/pedidos/1
+docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev eif509-demo-sesion12
 ```
 
-El pedido 3 es de otro cliente y responde 403:
+La aplicación no arranca: `Could not resolve placeholder 'JWT_SECRETO'`.
+Es el mismo mensaje que verán en los registros de la plataforma.
+
+### Parte 2 · Despliegue en la plataforma
+
+**6. Crear la base de datos (paso 10).** En el panel de Render:
+**New → Postgres**. Nombre `eif509-db`, base `eif509`, usuario `eif509`,
+versión **16**, plan **Free**. Al crearse, en la pestaña **Info** copien
+**Hostname**, **Port**, **Database**, **Username** y **Password**.
+
+**7. Convertir la URL al formato JDBC (paso 11).** Si copiaron la
+**Internal Database URL** (`postgresql://usuario:clave@host/base`), en la
+terminal 2:
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN_CLIENTE" http://localhost:8080/api/v1/pedidos/3
+python3 -c "import sys, urllib.parse as u; p = u.urlparse(sys.argv[1]); print(f'DATABASE_URL=jdbc:postgresql://{p.hostname}:{p.port or 5432}{p.path}'); print(f'DATABASE_USER={p.username}'); print(f'DATABASE_PASSWORD={p.password}')" 'postgresql://usuario:clave@host/base'
 ```
 
-**8. Las pruebas de seguridad (paso 13).** No necesitan Docker ni detener
-la API:
+Reemplacen el último argumento por la URL copiada (entre comillas simples).
+
+**8. Generar el secreto JWT de producción (paso 13).** En la terminal 2:
 
 ```bash
-./gradlew unitTest
+openssl rand -base64 48
 ```
 
-### Demostración 2 · SPA en React
+Es un secreto nuevo: no es el de desarrollo ni está en ningún repositorio.
 
-**9. Arrancar la SPA (paso 15).** En la terminal 2:
+**9. Crear el servicio web (paso 12).** **New → Web Service → Git
+Provider**, elijan el repositorio. Nombre `eif509-demo-sesion12`, rama
+`main`, lenguaje **Docker**, misma región que la base, plan **Free**.
+
+**10. Configurar las variables (paso 13).** En **Environment Variables**
+del mismo formulario, agreguen `SPRING_PROFILES_ACTIVE=prod`,
+`DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD` (paso 7),
+`JWT_SECRETO` (paso 8) y `CORS_ORIGEN=https://eif509-spa.onrender.com`.
+Pulsen **Deploy Web Service** (o **Create Web Service**, según la versión
+del panel).
+
+**11. Leer los registros (paso 14).** En la pestaña **Logs** del
+servicio: Gradle compila, se construye la imagen, arranca Spring con el
+perfil `prod`, Flyway aplica las 7 migraciones sobre la base vacía y
+Tomcat escucha en el puerto 10000.
+
+**12. Probar la URL pública (paso 15).** Abran
+`https://eif509-demo-sesion12.onrender.com/swagger-ui.html` (también desde
+el teléfono). En la terminal 2, con su URL:
 
 ```bash
-cd spa && npm install && npm run dev
+API=https://eif509-demo-sesion12.onrender.com
 ```
-
-**10. Usar la SPA (pasos 16 y 17).** Abran `http://localhost:5173` en el
-navegador. Entren como `cliente@demo.cr` / `cliente123`, recorran las
-páginas e intenten crear un producto: aparece el 403. Después cierren
-sesión, entren como `admin@demo.cr` / `admin123` y creen un producto.
-
-**11. El error de CORS (paso 18).** En la terminal 1, presionen `Ctrl+C` y
-ejecuten:
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=sin-cors'
+curl -i $API/api/v1/productos
 ```
-
-Recarguen la SPA y revisen el error en la consola del navegador (`F12`,
-pestaña *Console*).
-
-**12. Corregir CORS.** En la terminal 1, presionen `Ctrl+C` y ejecuten:
 
 ```bash
-./gradlew bootRun
+TOKEN=$(curl -s -X POST $API/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
 ```
 
-Recarguen la SPA: vuelve a funcionar.
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" "$API/api/v1/productos?page=0&size=3"
+```
 
-**13. La API detenida (paso 19).** En la terminal 1, presionen `Ctrl+C` y
-recarguen la SPA: aparece el mensaje de error.
+**13. Un cambio y despliegue automático (paso 16).** Editen la
+descripción en `src/main/java/cr/una/eif509/demo/DemoApplication.java`
+(por ejemplo, agreguen «Desplegada en la nube en la Sesión 12.») y
+publiquen:
+
+```bash
+git commit -am "Descripción de la API: desplegada en la nube" && git push
+```
+
+En la pestaña **Events** aparece el despliegue nuevo; al terminar,
+recarguen Swagger UI.
 
 ### Al terminar
 
-Detengan la SPA con `Ctrl+C` en la terminal 2 y, desde la carpeta del
-repositorio, apaguen la base de datos:
+En la terminal 1, `Ctrl+C` si la imagen sigue en ejecución, y apaguen la
+base local:
 
 ```bash
 docker compose down -v
 ```
 
-Dos aspectos que deben tener presentes:
-
-- **Arranquen siempre la API en la terminal 1**, donde definieron
-  `JWT_SECRETO`. Si el secreto cambia, la API rechaza los tokens anteriores
-  y la SPA vuelve al inicio de sesión.
-- **Si algo falla**, la rama `main` contiene la versión completa y las
-  secciones siguientes explican cada paso en detalle.
+El servicio en la nube queda en ejecución; en el plan gratuito se suspende
+tras 15 minutos sin tráfico y despierta con la siguiente petición (tarda
+alrededor de un minuto).
 
 ## Instalación y configuración
 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/adriangarro/eif509-demo-sesion11.git
-cd eif509-demo-sesion11
+git clone https://github.com/adriangarro/eif509-demo-sesion12.git
+cd eif509-demo-sesion12
 ```
 
 ### 2. Verificar que Docker Desktop está en ejecución
@@ -391,484 +363,490 @@ docker compose up -d
 docker ps
 ```
 
-Deben ver `eif509-demo-sesion11-db-1` en estado `Up`. Si aparece
+Deben ver `eif509-demo-sesion12-db-1` en estado `Up`. Si aparece
 `port is already allocated`, otra base del curso ocupa el puerto 5432:
 deténganla desde su carpeta (por ejemplo,
-`cd ../eif509-demo-sesion10 && docker compose stop`) y reintenten.
+`cd ../eif509-demo-sesion11 && docker compose stop`) y reintenten.
 
-### 4. Verificar Java y Node.js
-
-```bash
-java -version
-node --version
-```
-
-Java debe reportar 21 o superior y Node.js, 20 o superior.
-
-## Demostración 1 · Proteger la API con JWT y roles
-
-### 5. (Opcional) La API sin seguridad: rama `inicio`
-
-```bash
-git switch inicio
-./gradlew bootRun
-```
-
-Desde una **segunda terminal** en la misma carpeta:
-
-```bash
-curl -i http://localhost:8080/api/v1/productos
-```
-
-Salida esperada: `HTTP/1.1 200` y la lista de productos, sin credenciales.
-Un `POST` también funciona: cualquiera puede crear productos. Así está hoy
-la API de la mayoría de los proyectos.
-
-Detengan la aplicación con `Ctrl+C` en la primera terminal y vuelvan a la
-versión completa:
-
-```bash
-git switch main
-```
-
-### 6. Definir el secreto JWT
-
-La API firma y verifica los tokens con una clave secreta (HS256). La clave
-se lee de la variable de entorno `JWT_SECRETO`, nunca se escribe en el
-código ni se sube al repositorio, y debe tener **al menos 32 caracteres**.
-En la terminal donde van a arrancar la API:
+### 4. Verificar que todo sigue funcionando en desarrollo
 
 ```bash
 export JWT_SECRETO=$(openssl rand -base64 48)
-```
-
-En Windows (PowerShell), definan cualquier texto de 32 caracteres o más:
-
-```powershell
-$env:JWT_SECRETO = "una-clave-larga-de-al-menos-32-caracteres-para-hs256"
-```
-
-### 7. Arrancar la API
-
-```bash
 ./gradlew bootRun
 ```
 
-Salida esperada al final del arranque:
+Sin `SPRING_PROFILES_ACTIVE`, se usa el perfil `dev`
+(`spring.profiles.default: dev` en `application.yml`): la base del Docker
+Compose y el puerto 8080. Salida esperada:
 
 ```text
-o.f.core.internal.command.DbMigrate      : Successfully applied 7 migrations to schema "public", now at version v7
-cr.una.eif509.demo.DemoApplication       : Started DemoApplication in 1.57 seconds
+cr.una.eif509.demo.DemoApplication       : No active profile set, falling back to 1 default profile: "dev"
+o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
 ```
 
-Si antes hicieron el paso 5, verán `Successfully applied 1 migration`:
-Flyway aplica solo la V7. Si la API ya arrancó antes con esta base, verán
-`Schema "public" is up to date`: no hay migraciones pendientes.
+Detengan la aplicación con `Ctrl+C`. Los perfiles de las demostraciones
+anteriores se combinan con `dev`:
+`./gradlew bootRun --args='--spring.profiles.active=dev,sin-cors'`.
 
-Si falta la variable, la aplicación no arranca y el mensaje lo indica:
-`Could not resolve placeholder 'JWT_SECRETO'`. Si es demasiado corta:
-`JWT_SECRETO debe tener al menos 32 caracteres (tiene 5). HS256 requiere una clave de 256 bits.`
+## Parte 1 · El artefacto y la configuración, en su computadora
 
-Los comandos de los pasos siguientes van en la **segunda terminal**.
+### 5. Revisar el Dockerfile y los perfiles
 
-### 8. Sin token: 401
+[`Dockerfile`](Dockerfile) es el de la lámina 8:
+
+```dockerfile
+# Etapa 1: compilar
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /app
+COPY . .
+RUN ./gradlew bootJar --no-daemon -x test
+
+# Etapa 2: ejecutar
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/build/libs/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+**Qué observar**: la primera etapa compila con el JDK; la segunda copia
+solo el JAR a una imagen con el JRE, más pequeña y sin el código fuente ni
+Gradle. Las pruebas se omiten (`-x test`) porque ya se ejecutaron en la
+integración continua: lo que llega a `main` ya pasó las pruebas.
+[`.dockerignore`](.dockerignore) deja fuera `build/`, `.git/` y la SPA.
+
+[`application.yml`](src/main/resources/application.yml) tiene lo común a
+todos los ambientes:
+
+```yaml
+server:
+  port: ${PORT:8080}
+jwt:
+  secreto: ${JWT_SECRETO}
+cors:
+  origenes: ${CORS_ORIGEN:http://localhost:5173}
+```
+
+[`application-prod.yml`](src/main/resources/application-prod.yml), solo las
+diferencias:
+
+```yaml
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    show-sql: false
+logging:
+  level:
+    root: INFO
+```
+
+**Qué observar**: ningún valor secreto aparece en estos archivos, solo los
+nombres de las variables. La plataforma asigna el puerto en `PORT`; si la
+aplicación escuchara en un puerto fijo, la plataforma no podría dirigirle
+el tráfico y respondería 502. Los registros van a la salida estándar y la
+plataforma los recolecta: no se escriben archivos en el contenedor, que se
+pierden al reiniciarlo. [`application-dev.yml`](src/main/resources/application-dev.yml)
+apunta a la base del Docker Compose con las credenciales `dev`/`dev`, que
+no existen en ningún otro lugar.
+
+### 6. Construir la imagen
 
 ```bash
-curl -i http://localhost:8080/api/v1/productos
+docker build -t eif509-demo-sesion12 .
 ```
+
+Salida esperada al final (la primera vez tarda unos minutos):
 
 ```text
-HTTP/1.1 401
-WWW-Authenticate: Bearer
-
-{"type":"https://api.ejemplo.cr/errores/no-autenticado","title":"No autenticado","status":401,"detail":"Se requiere un token válido en la cabecera Authorization.","instance":"/api/v1/productos"}
+ => [build 4/4] RUN ./gradlew bootJar --no-daemon -x test
+ => [stage-1 3/3] COPY --from=build /app/build/libs/*.jar app.jar
+ => => naming to docker.io/library/eif509-demo-sesion12:latest
 ```
 
-**Qué observar**: la misma petición que en el paso 5 respondía 200. El
-filtro de seguridad no encontró un token válido y respondió antes de llegar
-al controlador. La configuración está en
-[`SeguridadConfig.java`](src/main/java/cr/una/eif509/demo/config/SeguridadConfig.java):
+Es exactamente lo que hará la plataforma en cada `push`. Si la
+construcción falla aquí, fallará también allá: por eso el CI de este
+repositorio también construye la imagen
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml), trabajo `imagen`).
 
-```java
-.securityMatcher("/api/**", "/auth/**")
-.csrf(csrf -> csrf.disable())
-.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-.authorizeHttpRequests(a -> a
-        .requestMatchers("/auth/login").permitAll()
-        .requestMatchers(HttpMethod.POST, "/api/v1/productos/**").hasRole("ADMIN")
-        .anyRequest().authenticated())
-.oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(convertidorDeRoles())))
-```
+### 7. Ejecutar la imagen como lo hará la plataforma
 
-`STATELESS` indica que el servidor no crea sesiones; por eso CSRF se
-deshabilita en la API (Sesión 10). Solo `/auth/login` es público.
-
-### 9. Iniciar sesión: el token
+La base del Docker Compose debe estar en ejecución (paso 3). Arranquen el
+contenedor con el perfil `prod`, las variables de la tabla y un puerto
+distinto al 8080, como haría la plataforma:
 
 ```bash
-curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}'
-```
-
-```text
-{"token":"eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJlaWY1MDkiLCJzdWIiOiJhZG1pbkBkZW1vLmNyIiwiZXhw...","tipo":"Bearer","expiraEnSegundos":3600}
-```
-
-Copien el valor de `token` y péguenlo en [jwt.io](https://jwt.io). El
-contenido (payload) es:
-
-```json
-{"iss":"eif509","sub":"admin@demo.cr","exp":1790881329,"iat":1790877729,"roles":["ADMIN"]}
-```
-
-**Qué observar**: `sub` es quién es, `roles` qué puede hacer y `exp` hasta
-cuándo vale (una hora). Cualquiera puede leer el contenido; lo que no puede
-hacer es modificarlo sin invalidar la firma. Por eso un token nunca lleva
-datos sensibles. Lo emite
-[`TokenService.java`](src/main/java/cr/una/eif509/demo/seguridad/TokenService.java)
-y lo devuelve
-[`AuthController.java`](src/main/java/cr/una/eif509/demo/api/AuthController.java)
-después de comparar la clave con el hash BCrypt.
-
-Para los pasos siguientes, guarden el token en una variable:
-
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
-```
-
-### 10. Con el token: 200
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/productos
-```
-
-Salida esperada: `200`. El servidor no guardó nada al iniciar sesión:
-verificó la firma y la expiración del token en esta misma petición.
-
-Como `ADMIN`, también puede crear productos:
-
-```bash
-curl -i -X POST http://localhost:8080/api/v1/productos -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"nombre": "Café Tarrazú 1 kg", "precio": 9800.00, "disponible": 25}'
-```
-
-Salida esperada: `HTTP/1.1 201` con `Location: /api/v1/productos/13`.
-
-### 11. Rol sin permiso: 403
-
-Inicien sesión como `cliente@demo.cr` e intenten crear un producto:
-
-```bash
-TOKEN_CLIENTE=$(curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "cliente@demo.cr", "clave": "cliente123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
-curl -i -X POST http://localhost:8080/api/v1/productos -H "Authorization: Bearer $TOKEN_CLIENTE" -H 'Content-Type: application/json' -d '{"nombre": "Producto del cliente", "precio": 1, "disponible": 1}'
-```
-
-```text
-HTTP/1.1 403
-
-{"type":"https://api.ejemplo.cr/errores/acceso-denegado","title":"Acceso denegado","status":403,"detail":"Su rol no tiene permiso para realizar esta operación.","instance":"/api/v1/productos"}
-```
-
-**Qué observar**: el usuario está **autenticado** (el token es válido), pero
-no está **autorizado**: su rol no le permite crear productos. Esa es la
-diferencia entre autenticación (¿quién es?) y autorización (¿puede hacer
-esto?).
-
-El convertidor `convertidorDeRoles()` transforma la claim `roles` del token
-en las autoridades que usa Spring (`ROLE_ADMIN`, `ROLE_CLIENTE`); sin él,
-`hasRole("ADMIN")` siempre respondería 403.
-
-### 12. Propiedad del recurso: 403
-
-Con el token de la clienta, el pedido 1 es suyo y el 3 es de otro cliente:
-
-```bash
-curl -s -o /dev/null -w "pedido 1 -> %{http_code}\n" -H "Authorization: Bearer $TOKEN_CLIENTE" http://localhost:8080/api/v1/pedidos/1
-curl -s -H "Authorization: Bearer $TOKEN_CLIENTE" http://localhost:8080/api/v1/pedidos/3
-```
-
-```text
-pedido 1 -> 200
-{"type":"https://api.ejemplo.cr/errores/acceso-denegado","title":"Acceso denegado","status":403,"detail":"No tiene permiso para consultar este recurso","instance":"/api/v1/pedidos/3"}
-```
-
-**Qué observar**: un token válido no autoriza a ver cualquier pedido. Esta
-regla depende de los datos, por eso no se puede declarar en la
-configuración y vive en el servicio
-([`PedidoService.java`](src/main/java/cr/una/eif509/demo/service/PedidoService.java)):
-
-```java
-public PedidoResumen obtener(Long pedidoId, UsuarioActual usuario) {
-    var pedido = pedidos.findById(pedidoId)
-            .orElseThrow(() -> new PedidoNoExisteException(pedidoId));
-    if (!usuario.esAdmin() && !pedido.getCliente().getEmail().equals(usuario.correo())) {
-        throw new AccesoDenegadoException();   // -> 403
-    }
-    return PedidoMapper.aResumen(pedido);
-}
-```
-
-El controlador construye `UsuarioActual` a partir del token
-(`auth.getName()` es el `sub`). Es el riesgo número 1 de OWASP para API
-(API1: *Broken Object Level Authorization*). El listado
-`GET /api/v1/pedidos` aplica la misma regla: un cliente recibe solo sus
-pedidos.
-
-Un inicio de sesión fallido responde con el mismo mensaje si el correo no
-existe o si la clave es incorrecta, para no revelar qué correos están
-registrados:
-
-```bash
-curl -s -X POST http://localhost:8080/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "incorrecta"}'
-```
-
-```text
-{"type":"https://api.ejemplo.cr/errores/credenciales-invalidas","title":"Credenciales inválidas","status":401,"detail":"Correo o clave incorrectos","instance":"/auth/login"}
-```
-
-### 13. Las pruebas de seguridad
-
-Sin Docker:
-
-```bash
-./gradlew unitTest
-```
-
-[`SeguridadApiTest`](src/test/java/cr/una/eif509/demo/api/SeguridadApiTest.java)
-contiene las pruebas de la lámina 9: sin token, 401; con el rol `CLIENTE`,
-403; con el rol `ADMIN`, 201. `jwt()` de `spring-security-test` simula una
-petición autenticada con las autoridades indicadas, sin generar tokens
-reales:
-
-```java
-mvc.perform(post("/api/v1/productos")
-        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CLIENTE")))
-        .contentType(MediaType.APPLICATION_JSON).content(PRODUCTO_JSON))
-   .andExpect(status().isForbidden());
-```
-
-Con Docker, todas las pruebas (73):
-
-```bash
-./gradlew test
-```
-
-[`AutenticacionIT`](src/test/java/cr/una/eif509/demo/seguridad/AutenticacionIT.java)
-repite el recorrido de esta demostración con tokens reales contra PostgreSQL
-(Testcontainers): inicio de sesión correcto e incorrecto, 401, 200, 403 por
-rol, 403 por propiedad del recurso y CORS. Las pruebas usan un secreto JWT
-propio, definido en `build.gradle`; no necesitan la variable de entorno.
-
-### 14. (Adicional) Swagger UI con el token
-
-Abran `http://localhost:8080/swagger-ui.html`. Ejecuten `POST /auth/login`,
-copien el token, pulsen **Authorize** y péguenlo. A partir de ahí, Swagger
-UI envía la cabecera `Authorization: Bearer <token>` en cada petición.
-
-## Demostración 2 · Una SPA en React que consume la API
-
-La API debe seguir en ejecución (paso 7).
-
-### 15. Arrancar la SPA
-
-En la segunda terminal:
-
-```bash
-cd spa
-npm install
-npm run dev
+docker run --rm --name api-prod -p 10000:10000 -e PORT=10000 -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev -e JWT_SECRETO=$(openssl rand -base64 48) -e CORS_ORIGEN=https://eif509-spa.onrender.com eif509-demo-sesion12
 ```
 
 Salida esperada:
 
 ```text
-VITE v8.3.2  ready in 190 ms
-➜  Local:   http://localhost:5173/
+cr.una.eif509.demo.DemoApplication       : The following 1 profile is active: "prod"
+org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://host.docker.internal:5432/eif509 (PostgreSQL 16.15)
+o.f.core.internal.command.DbMigrate      : Successfully applied 7 migrations to schema "public", now at version v7
+o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 10000 (http) with context path '/'
+cr.una.eif509.demo.DemoApplication       : Started DemoApplication in 1.991 seconds
 ```
 
-El proyecto se generó con `npm create vite@latest spa -- --template react`,
-el mismo comando de la clase; luego se reemplazaron los archivos de
-ejemplo por los de este catálogo.
+**Qué observar**: el mismo artefacto que corre en desarrollo corre aquí con
+otra configuración, recibida completa desde el entorno (factor
+«configuración» de los doce factores). `host.docker.internal` es la
+dirección con la que un contenedor llega a la computadora anfitriona en
+Docker Desktop; en la nube, `DATABASE_URL` apunta a la base gestionada.
+En Windows (PowerShell), reemplacen `$(openssl rand -base64 48)` por un
+texto de 32 caracteres o más.
 
-### 16. Iniciar sesión desde la SPA
+### 8. Probar la API en el puerto asignado
 
-Abran `http://localhost:5173` e inicien sesión con `cliente@demo.cr` /
-`cliente123`.
-
-Salida esperada: la barra superior muestra `cliente@demo.cr (CLIENTE)`, el
-texto **«Productos en el catálogo: 13»** (o 12 si no crearon el producto
-del paso 10) y una tabla de 5 productos con los botones **« Anterior** y
-**Siguiente »**.
-
-Todas las llamadas pasan por [`spa/src/api.js`](spa/src/api.js):
-
-```javascript
-export async function api(ruta, opciones = {}) {
-  const token = leerToken();
-  resp = await fetch(API_URL + ruta, {
-    ...opciones,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-  });
-  if (resp.status === 401 && token) {          // token vencido o inválido
-    borrarToken();
-    window.location.href = "/login";
-  }
-  if (!resp.ok) throw await leerProblema(resp); // Problem Details
-  return resp.json();
-}
-```
-
-**Qué observar**: la función agrega el token y, si la API responde 401,
-regresa al inicio de sesión. Así no se repite esta lógica en cada pantalla.
-
-### 17. Los tres estados de una consulta
-
-[`spa/src/ProductoLista.jsx`](spa/src/ProductoLista.jsx) consulta
-`GET /api/v1/productos?page=0&size=5` en un efecto (`useEffect`) y muestra
-uno de tres estados: **«Cargando...»**, la tabla con los datos, o el
-mensaje de error. Pulsen **Siguiente »**: la consulta se repite con
-`page=1`.
-
-Con el rol `CLIENTE`, intenten crear un producto en el formulario
-**Nuevo producto**. Salida esperada, en rojo:
-
-```text
-Acceso denegado: Su rol no tiene permiso para realizar esta operación.
-```
-
-El mensaje es el Problem Details que la API devuelve desde la Sesión 9.
-Cierren sesión, entren como `admin@demo.cr` / `admin123` y repitan: el
-producto se crea, aparece el mensaje verde y la lista se recarga.
-
-### 18. El error de CORS
-
-Detengan la API (`Ctrl+C` en la primera terminal) y arránquenla con el
-perfil que no autoriza ningún origen:
+Desde la **segunda terminal**:
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=sin-cors'
+curl -i http://localhost:10000/api/v1/productos
 ```
-
-Recarguen la SPA. Salida esperada en la pantalla:
 
 ```text
-No se pudo conectar con la API. Verifiquen que esté en ejecución y que permita este origen (CORS).
+HTTP/1.1 401
+WWW-Authenticate: Bearer
+Content-Type: application/problem+json;charset=UTF-8
+
+{"type":"https://api.ejemplo.cr/errores/no-autenticado","title":"No autenticado","status":401,"detail":"Se requiere un token válido en la cabecera Authorization.","instance":"/api/v1/productos"}
 ```
-
-Y en la consola del navegador (`F12` → *Console*):
-
-```text
-Access to fetch at 'http://localhost:8080/api/v1/productos?page=0&size=5' from origin 'http://localhost:5173'
-has been blocked by CORS policy: Response to preflight request doesn't pass access control check:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
-
-**Qué observar**: con `curl` la misma petición funciona; el navegador no.
-La SPA está en el puerto 5173 y la API en el 8080: son orígenes distintos,
-y el navegador solo entrega la respuesta si el servidor autoriza ese origen
-de forma explícita. Antes de una petición con la cabecera `Authorization`,
-el navegador envía una petición previa (`OPTIONS`) para consultar el
-permiso; aquí esa consulta recibe 403.
-
-Detengan la API y arránquenla sin el perfil:
 
 ```bash
-./gradlew bootRun
+TOKEN=$(curl -s -X POST http://localhost:10000/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
+curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:10000/api/v1/productos
 ```
 
-Recarguen la SPA: ahora funciona. Arranquen siempre la API en la misma
-terminal donde definieron `JWT_SECRETO`: si el secreto cambia, la API
-rechaza los tokens emitidos con el anterior (401) y la SPA vuelve al
-inicio de sesión, que es el comportamiento esperado.
+Salida esperada: `200`. Swagger UI está en
+`http://localhost:10000/swagger-ui.html`. Es la misma API de la Sesión 11:
+solo cambió el puerto, que ahora viene de `PORT`.
 
-La configuración está en
-`SeguridadConfig.corsConfigurationSource()`:
+El origen de la SPA también viene del entorno. Una petición previa de CORS
+desde el origen configurado recibe 200; desde cualquier otro, 403:
 
-```java
-config.setAllowedOrigins(List.of("http://localhost:5173"));   // de cors.origenes
-config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS http://localhost:10000/api/v1/productos -H "Origin: https://eif509-spa.onrender.com" -H "Access-Control-Request-Method: GET"
+curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS http://localhost:10000/api/v1/productos -H "Origin: http://localhost:5173" -H "Access-Control-Request-Method: GET"
 ```
 
-Se autoriza un origen específico, nunca `*`. En producción se indica el
-dominio real del frontend con la variable `CORS_ORIGENES`. CORS no protege
-al servidor: solo controla qué respuestas pueden leer los navegadores.
+### 9. Qué pasa cuando falta una variable
 
-### 19. La API detenida
+Detengan el contenedor (`Ctrl+C` en la primera terminal) y arránquenlo sin
+`JWT_SECRETO`:
 
-Detengan la API con `Ctrl+C` y recarguen la SPA. Salida esperada: el mismo
-mensaje rojo del paso 18. La pantalla muestra el error en lugar de quedarse
-en blanco o en «Cargando...».
+```bash
+docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev eif509-demo-sesion12
+```
 
-## Dónde guardar el token en el cliente
+```text
+***************************
+APPLICATION FAILED TO START
+***************************
+Caused by: java.lang.IllegalArgumentException: Could not resolve placeholder 'JWT_SECRETO' in value "${JWT_SECRETO}"
+```
 
-Esta SPA lo guarda en `localStorage` ([`spa/src/sesion.js`](spa/src/sesion.js)).
+Y con la URL de la base en el formato que entregan algunas plataformas
+(`postgres://usuario:clave@host/base`) en lugar del formato JDBC:
 
-| Opción | Ventaja | Riesgo |
-|---|---|---|
-| `localStorage` (esta SPA) | Sencilla; el token sobrevive a recargas de la página | Cualquier script de la página puede leerlo: un XSS permite robarlo |
-| Memoria (variable de estado) | No queda guardado al cerrar la pestaña | Se pierde al recargar; exige iniciar sesión otra vez |
-| Cookie `httpOnly` | JavaScript no puede leerla | El navegador la envía sola: requiere protección CSRF |
+```bash
+docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DATABASE_URL=postgres://dev:dev@host.docker.internal:5432/eif509 -e DATABASE_USER=dev -e DATABASE_PASSWORD=dev -e JWT_SECRETO=$(openssl rand -base64 48) eif509-demo-sesion12
+```
 
-Para el curso, `localStorage` es aceptable porque React escapa el contenido
-por defecto y el token vence en una hora. La decisión y su justificación se
-documentan en un ADR.
+```text
+Failed to instantiate [com.zaxxer.hikari.HikariDataSource]: Factory method 'dataSource' threw exception with message: URL must start with 'jdbc'
+```
 
-Con JWT, «cerrar sesión» es descartar el token en el cliente: el token
-sigue siendo válido hasta que expire, por eso su vigencia es corta.
+**Qué observar**: los registros de arranque son el primer lugar donde se
+busca la causa. Si la aplicación no arranca en la nube, suele ser una
+variable ausente, una URL con el formato incorrecto o una migración
+fallida; el mensaje es el mismo que acaban de ver aquí.
+
+## Parte 2 · Despliegue en la plataforma como servicio
+
+Los pasos usan el panel de [Render](https://dashboard.render.com); el
+flujo en Railway es equivalente. Para su propio proyecto, el repositorio
+debe ser suyo (en GitHub): la plataforma lo lee directamente.
+
+### 10. Crear la base PostgreSQL gestionada
+
+En el panel, **New → Postgres**:
+
+| Campo | Valor |
+|---|---|
+| Name | `eif509-db` |
+| Database | `eif509` |
+| User | `eif509` |
+| Region | La misma que usarán para el servicio web (por ejemplo, Oregon) |
+| PostgreSQL Version | **16** (la misma del `docker-compose.yml`: paridad entre ambientes) |
+| Plan | **Free** |
+
+Pulsen **Create Database**. Cuando el estado sea **Available**, en la
+pestaña **Info** están los datos de conexión: **Hostname**, **Port**,
+**Database**, **Username**, **Password** y las URL **Internal** y
+**External**.
+
+**Qué observar**: la base es un servicio de respaldo; la aplicación solo
+necesita su URL y sus credenciales. La URL interna sirve para servicios de
+la misma región y cuenta (red privada); la externa, para conectarse desde
+su computadora, por ejemplo con `psql`.
+
+El plan gratuito de Render permite **una** base PostgreSQL por cuenta,
+con 1 GB, y **expira a los 30 días** de creada (con 14 días de gracia para
+pasarla a un plan de pago). Anoten la fecha: para el Laboratorio 6, los
+servicios deben seguir disponibles hasta que se publique la calificación.
+Si necesitan más tiempo, otros proveedores ofrecen PostgreSQL gestionado
+gratuito sin vencimiento (por ejemplo, [Neon](https://neon.tech) o
+[Supabase](https://supabase.com)); la aplicación no cambia, solo las tres
+variables.
+
+### 11. Convertir la URL al formato JDBC
+
+Spring necesita `jdbc:postgresql://host:5432/base`, con el usuario y la
+clave en variables separadas. Hay dos formas de obtener los valores:
+
+- Con los campos de la pestaña **Info**:
+  `DATABASE_URL=jdbc:postgresql://<Hostname>:<Port>/<Database>`,
+  `DATABASE_USER=<Username>` y `DATABASE_PASSWORD=<Password>`.
+- A partir de la **Internal Database URL**
+  (`postgresql://usuario:clave@host/base`), con este comando:
+
+```bash
+python3 -c "import sys, urllib.parse as u; p = u.urlparse(sys.argv[1]); print(f'DATABASE_URL=jdbc:postgresql://{p.hostname}:{p.port or 5432}{p.path}'); print(f'DATABASE_USER={p.username}'); print(f'DATABASE_PASSWORD={p.password}')" 'postgresql://eif509:AbC123xyz@dpg-abc123-a/eif509'
+```
+
+```text
+DATABASE_URL=jdbc:postgresql://dpg-abc123-a:5432/eif509
+DATABASE_USER=eif509
+DATABASE_PASSWORD=AbC123xyz
+```
+
+Reemplacen el último argumento por su URL, entre comillas simples. El
+comando funciona con `postgres://` y con `postgresql://`, y agrega el
+puerto 5432 si la URL no lo trae. Es el error más frecuente al conectar con
+la base (paso 9): si la aplicación no logra conectarse, revisen primero
+este formato.
+
+### 12. Crear el servicio web
+
+**New → Web Service**, opción **Git Provider**. Si es la primera vez,
+autoricen a Render para leer sus repositorios de GitHub y elijan el
+repositorio.
+
+| Campo | Valor |
+|---|---|
+| Name | `eif509-demo-sesion12` (forma parte de la URL: `https://eif509-demo-sesion12.onrender.com`) |
+| Region | La misma de la base |
+| Branch | `main` |
+| Language | **Docker** |
+| Instance Type | **Free** |
+
+**Qué observar**: con el lenguaje **Docker**, la plataforma construye la
+imagen a partir del `Dockerfile` del repositorio en cada `push` a `main`
+(**Auto-Deploy** queda activado por defecto). No hay comando de
+construcción ni de arranque que escribir: están en el `Dockerfile`.
+
+### 13. Configurar las variables de entorno
+
+En el mismo formulario, sección **Environment Variables**, agreguen una por
+una (**Add Environment Variable**):
+
+| Clave | Valor |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `DATABASE_URL` | El valor del paso 11 |
+| `DATABASE_USER` | El valor del paso 11 |
+| `DATABASE_PASSWORD` | El valor del paso 11 |
+| `JWT_SECRETO` | Un secreto **nuevo**, generado con `openssl rand -base64 48` |
+| `CORS_ORIGEN` | La URL de su SPA; si aún no existe, `https://eif509-spa.onrender.com` |
+
+No agreguen `PORT`: Render la define (`10000`) y la aplicación la lee.
+Pulsen **Deploy Web Service** (o **Create Web Service**, según la versión
+del panel).
+
+**Qué observar**: aquí, y solo aquí, viven los secretos. El secreto JWT de
+producción es distinto al de desarrollo y no está en ningún repositorio.
+Si más adelante cambian `JWT_SECRETO`, los tokens emitidos antes dejan de
+valer: es el comportamiento esperado.
+
+Para proyectos con MongoDB (subdominio de la Sesión 4), agreguen también
+`MONGODB_URI` con la cadena de conexión de
+[MongoDB Atlas](https://www.mongodb.com/atlas) (`mongodb+srv://...`) y
+declárenla en `application-prod.yml` como
+`spring.data.mongodb.uri: ${MONGODB_URI}`. Este repositorio no usa MongoDB.
+
+### 14. Seguir los registros de construcción y de arranque
+
+Al crear el servicio se abre la pestaña **Logs**. Lean con el grupo, en
+orden:
+
+1. `==> Cloning from https://github.com/...` y la construcción de la
+   imagen: la plataforma ejecuta el `Dockerfile`; Gradle descarga las
+   dependencias y compila (`RUN ./gradlew bootJar --no-daemon -x test`).
+   Tarda varios minutos la primera vez.
+2. El arranque: de Spring, `The following 1 profile is active: "prod"`.
+3. De Flyway, `Successfully applied 7 migrations to schema "public"`: la
+   base gestionada estaba vacía y ahora tiene las mismas tablas y datos
+   semilla que la local.
+4. `Tomcat started on port 10000`, `Started DemoApplication` y, de la
+   plataforma, `==> Your service is live`.
+
+**Qué observar**: si algo falla, este es el primer lugar donde se busca la
+causa (paso 9). La tabla de
+[Solución de problemas](#solución-de-problemas) reúne los casos frecuentes.
+
+### 15. Abrir la URL pública
+
+La URL está en la parte superior de la página del servicio. Abran
+`https://eif509-demo-sesion12.onrender.com/swagger-ui.html`: la misma
+documentación de la Sesión 9, ahora en internet y con HTTPS, que la
+plataforma gestiona. Pueden abrirla desde el teléfono.
+
+Desde la terminal, con su URL:
+
+```bash
+API=https://eif509-demo-sesion12.onrender.com
+curl -i $API/api/v1/productos
+```
+
+Salida esperada: `HTTP/2 401` (la plataforma atiende en HTTP/2) y el mismo
+Problem Details del paso 8. Inicien sesión y consulten con el token:
+
+```bash
+TOKEN=$(curl -s -X POST $API/auth/login -H 'Content-Type: application/json' -d '{"correo": "admin@demo.cr", "clave": "admin123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
+curl -s -H "Authorization: Bearer $TOKEN" "$API/api/v1/productos?page=0&size=3"
+```
+
+Salida esperada: la primera página del catálogo. En Swagger UI, ejecuten
+`POST /auth/login`, pulsen **Authorize**, peguen el token y prueben
+`GET /api/v1/pedidos`.
+
+**Qué observar**: el token funciona igual que en local porque el flujo es
+el mismo; lo único distinto es el secreto con el que se firmó. Si la
+primera respuesta tarda alrededor de un minuto, el plan gratuito había
+suspendido el servicio por inactividad; las siguientes son normales. Las
+mismas peticiones están en [`peticiones/nube.http`](peticiones/nube.http):
+cambien el valor de `@host`.
+
+### 16. Un cambio pequeño y el despliegue automático
+
+Editen la descripción de la API en
+[`DemoApplication.java`](src/main/java/cr/una/eif509/demo/DemoApplication.java)
+(por ejemplo, agreguen al final «Desplegada en la nube en la Sesión 12.»)
+y publiquen el cambio:
+
+```bash
+git commit -am "Descripción de la API: desplegada en la nube"
+git push
+```
+
+En la pestaña **Events** del servicio aparece un despliegue nuevo:
+construcción de la imagen, arranque y, al terminar, `Live`. Recarguen
+Swagger UI: la descripción cambió.
+
+**Qué observar**: cada `push` a `main` genera una versión nueva sin pasos
+manuales. Por eso la integración continua debe ejecutar las pruebas antes:
+lo que llega a `main` se publica. En este repositorio, el CI de GitHub
+Actions ejecuta las 73 pruebas, la regla de cobertura, la SPA y la
+construcción de la imagen en cada `push`; en un equipo, la rama `main` se
+protege para que solo reciba cambios con el CI en verde.
+
+## La SPA en producción
+
+La SPA es un sitio estático: `npm run build` genera HTML, CSS y JavaScript
+que se publican en un servicio de sitios estáticos. En Render, **New →
+Static Site** sobre el mismo repositorio:
+
+| Campo | Valor |
+|---|---|
+| Name | `eif509-spa` (su URL: `https://eif509-spa.onrender.com`) |
+| Root Directory | `spa` |
+| Build Command | `npm ci && npm run build` |
+| Publish Directory | `dist` |
+| Environment Variables | `VITE_API_URL` = la URL de la API (sin `/` al final) |
+
+Después de crearlo, en **Redirects/Rewrites** agreguen la regla
+**Source** `/*`, **Destination** `/index.html`, **Action** `Rewrite`, para
+que las rutas de la SPA (`/login`) funcionen al recargar la página.
+
+Dos aspectos que deben tener presentes:
+
+- Las variables `VITE_` se incorporan al código al construir la SPA y
+  cualquier persona puede verlas en el navegador. Nunca deben contener
+  secretos; `VITE_API_URL` es pública y no hay problema.
+- `CORS_ORIGEN` en la API debe ser exactamente la URL de la SPA
+  (`https://eif509-spa.onrender.com`, sin `/` al final). Si la SPA no
+  recibe datos, revisen la consola del navegador (`F12`): el mensaje de
+  CORS de la Sesión 11 indica que el origen no coincide.
+
+## Secretos en el historial de Git
+
+Borrar un secreto del código en un commit nuevo no lo elimina: sigue en los
+commits anteriores para cualquier persona con acceso al repositorio.
+Revisen su proyecto antes de desplegar:
+
+```bash
+git log -p | grep -i -E "password|secreto|secret|mongodb\+srv" | head
+```
+
+Si aparece un valor real, la medida correcta es **cambiar el secreto**
+(generar uno nuevo y configurarlo solo en la plataforma); reescribir el
+historial no sustituye el cambio, porque alguien pudo haberlo copiado
+antes. En la rúbrica del Laboratorio 6, un secreto en uso en producción
+que aparezca en el historial califica el criterio de perfiles y secretos
+con cero.
 
 ## Comandos útiles
 
 | Acción | Comando |
 |---|---|
-| Levantar la base | `docker compose up -d` |
-| Definir el secreto (macOS y Linux) | `export JWT_SECRETO=$(openssl rand -base64 48)` |
-| Arrancar la API | `./gradlew bootRun` |
-| Arrancar la API sin CORS (demostración del error) | `./gradlew bootRun --args='--spring.profiles.active=sin-cors'` |
-| Arrancar la SPA | `cd spa && npm install && npm run dev` |
-| SPA | `http://localhost:5173` |
-| Módulo administrativo (Sesión 10) | `http://localhost:8080/admin/productos` (`admin@demo.cr` / `admin123`) |
-| Swagger UI | `http://localhost:8080/swagger-ui.html` |
-| Solo pruebas unitarias (sin Docker) | `./gradlew unitTest` |
+| Levantar la base local | `docker compose up -d` |
+| Arrancar en desarrollo (perfil `dev`) | `export JWT_SECRETO=$(openssl rand -base64 48) && ./gradlew bootRun` |
+| Construir la imagen | `docker build -t eif509-demo-sesion12 .` |
+| Ejecutar la imagen como la plataforma | El comando del paso 7 |
+| Generar un secreto JWT | `openssl rand -base64 48` |
+| Convertir la URL de la base a JDBC | El comando del paso 11 |
+| Ver qué contiene la imagen final | `docker run --rm --entrypoint ls eif509-demo-sesion12 -la /app` |
+| Swagger UI en local / en la nube | `http://localhost:8080/swagger-ui.html` / `https://<nombre>.onrender.com/swagger-ui.html` |
 | Todas las pruebas y cobertura | `./gradlew test` |
-| Revisar y compilar la SPA (lo que ejecuta el CI) | `cd spa && npm run lint && npm run build` |
-| Reiniciar la demo desde cero | `docker compose down -v && docker compose up -d` |
+| Reiniciar la demo local desde cero | `docker compose down -v && docker compose up -d` |
 
 ## Solución de problemas
 
 | Problema | Causa | Solución |
 |---|---|---|
-| `Could not resolve placeholder 'JWT_SECRETO'` al arrancar | Falta la variable de entorno | Definirla en la misma terminal (paso 6) |
-| `JWT_SECRETO debe tener al menos 32 caracteres` | La clave es demasiado corta para HS256 | Usar 32 caracteres o más; `openssl rand -base64 48` genera una adecuada |
-| 401 incluso con el token | La cabecera no es exactamente `Authorization: Bearer <token>`, el token venció, o la API se reinició con otro `JWT_SECRETO` | Revisar la cabecera; iniciar sesión otra vez para obtener un token nuevo |
-| `hasRole("ADMIN")` siempre responde 403 | Falta el convertidor de roles o el prefijo `ROLE_` | Ver `convertidorDeRoles()` en `SeguridadConfig`; comparar con el contenido del token en jwt.io |
-| La SPA muestra «No se pudo conectar con la API» | La API está detenida, o se arrancó con el perfil `sin-cors` | Arrancar la API sin el perfil (paso 7) |
-| CORS sigue fallando después de configurarlo | El origen no coincide exactamente (protocolo y puerto) | El origen debe ser `http://localhost:5173`; si la SPA usa otro puerto, definir `CORS_ORIGENES` antes de arrancar la API |
-| `npm: command not found` | Falta Node.js | Instalarlo desde nodejs.org |
-| `Port 5173 is in use` | Otra instancia de Vite en ejecución | Detenerla con `Ctrl+C`, o usar el puerto que Vite propone y definir `CORS_ORIGENES` con ese puerto |
-| `Port 8080 was already in use` | Otra aplicación en ejecución (por ejemplo, la de la Sesión 10) | Detenerla con `Ctrl+C` |
+| `Could not resolve placeholder 'JWT_SECRETO'` en los registros | Falta la variable en la plataforma (o en el `docker run`) | Agregarla en **Environment** y volver a desplegar |
+| `URL must start with 'jdbc'` | `DATABASE_URL` falta o tiene el formato `postgres://` | Convertirla al formato JDBC (paso 11) con usuario y clave en variables separadas |
+| `Connection to host:5432 refused` o `password authentication failed` | Host, usuario o clave incorrectos, o la base en otra región | Copiar de nuevo los valores de la pestaña **Info**; usar la misma región |
+| La construcción falla con `Permission denied` en `gradlew` | El archivo perdió el permiso de ejecución en Git | `git update-index --chmod=+x gradlew`, commit y push; o agregar `RUN chmod +x ./gradlew` antes de compilar en el `Dockerfile` |
+| La plataforma reporta `No open ports detected` o responde 502 | La aplicación no escucha en el puerto de `PORT` | Verificar `server.port: ${PORT:8080}` en `application.yml` |
+| Flyway falla al migrar (`Migration V... failed`) | Un script con error, o una base que quedó a medias | Leer el script y la línea en el mensaje; en la demostración, recrear la base vacía |
+| La primera respuesta tarda alrededor de un minuto | El plan gratuito suspendió el servicio por inactividad | Es esperable; las siguientes respuestas son normales |
+| Los tokens dejan de funcionar tras un despliegue | `JWT_SECRETO` cambió entre despliegues | Mantener el secreto estable en la plataforma |
+| La SPA no recibe datos | `CORS_ORIGEN` no coincide con la URL real de la SPA, o `VITE_API_URL` es incorrecta | Revisar la consola del navegador y ambas variables |
+| `docker build` falla por falta de espacio o memoria | Imágenes antiguas acumuladas | `docker system prune` y reintentar |
+| En Linux, el contenedor no encuentra `host.docker.internal` | Solo Docker Desktop define ese nombre | Agregar `--add-host=host.docker.internal:host-gateway` al `docker run` |
 | `Bind for 0.0.0.0:5432 failed: port is already allocated` | Otra base del curso usa el puerto | `docker ps` para ver cuál y `docker compose stop` desde su carpeta |
-| El módulo administrativo no acepta `admin` / `admin123` | Desde esta sesión, el usuario es un correo | Usar `admin@demo.cr` / `admin123` |
 | `Unable to locate a Java Runtime` | Falta el JDK o `JAVA_HOME` | Ver Requisitos previos |
 
 ## Relación con los laboratorios
 
-**Laboratorio 5** (entrega el jueves 8 de octubre a las 6:00 p. m.): este
-repositorio cubre el criterio de seguridad (2 puntos): `POST /auth/login`
-que emite el token, API sin estado, dos roles con autorización por
-endpoint, verificación de propiedad del recurso en el servicio, y las
-pruebas de 401, 403 y 200. En el taller de hoy apliquen los pasos 1 a 4
-(configuración, emisión del token, roles y propiedad, pruebas) a su propio
-proyecto.
-
-**Laboratorio 6** (se asigna el jueves 8): la SPA de su dominio sobre su
-API. Este repositorio muestra la base: el módulo cliente con el token, la
-pantalla de inicio de sesión, un listado con sus tres estados y la
-configuración de CORS.
+**Laboratorio 6** (se asigna hoy; entrega el jueves 22 de octubre a las
+6:00 p. m.): este repositorio cubre los criterios de **despliegue en la
+nube** (2.5 puntos: API y base de datos en servicios gestionados, Flyway en
+el arranque y Swagger UI disponible) y de **perfiles y secretos** (1 punto:
+perfiles `dev` y `prod`, todos los secretos en variables de entorno de la
+plataforma, ninguno en el repositorio ni en su historial, y un secreto JWT
+de producción distinto al de desarrollo). En el taller de hoy, creen su
+servicio y su base, configuren las variables de su proyecto y dejen la API
+en proceso de despliegue; la SPA puede publicarse la próxima semana. Las
+URL públicas y las credenciales de los usuarios de prueba se registran en
+el aula virtual el día de la entrega.
 
 ---
 
-> **Material de referencia del curso.** La seguridad y las pantallas de su
-> laboratorio deben diseñarse a partir de su propio dominio; no copien este
-> ejemplo.
+> **Material de referencia del curso.** La configuración de despliegue de
+> su laboratorio debe corresponder a su propio proyecto y a sus propios
+> servicios; no copien este ejemplo.
