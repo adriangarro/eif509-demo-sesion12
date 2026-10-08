@@ -1,0 +1,15 @@
+# Perfil dev: la computadora de cada quien, con la base de datos del
+# docker-compose.yml. Estos valores no son secretos: solo sirven para el
+# contenedor local y no existen en ningún otro lugar.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/eif509
+    username: dev
+    password: dev
+  jpa:
+    # Ver cada SQL que Hibernate envía (Sesión 8): útil en desarrollo,
+    # ruido en los registros de producción.
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true

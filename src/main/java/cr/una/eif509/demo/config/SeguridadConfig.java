@@ -35,7 +35,7 @@ import java.util.List;
 public class SeguridadConfig {
 
     // Paso 1 de la lámina: la clave se lee de la variable de entorno
-    // JWT_SECRETO (ver application.properties) y nunca se escribe en el código.
+    // JWT_SECRETO (ver application.yml) y nunca se escribe en el código.
     // El mismo secreto firma y verifica el token (HS256).
     @Bean
     SecretKey claveJwt(@Value("${jwt.secreto}") String secreto) {
@@ -108,7 +108,9 @@ public class SeguridadConfig {
     // CORS: la SPA (http://localhost:5173) y la API (http://localhost:8080)
     // son orígenes distintos. El navegador solo entrega la respuesta a la
     // SPA si la API autoriza ese origen de forma explícita. Se autorizan
-    // orígenes concretos, nunca "*". El valor sale de cors.origenes.
+    // orígenes concretos, nunca "*". El valor sale de cors.origenes, que en
+    // producción se llena con la variable CORS_ORIGEN (el dominio real de
+    // la SPA), sin tocar el código.
     @Bean
     CorsConfigurationSource corsConfigurationSource(@Value("${cors.origenes:}") String[] origenes) {
         var config = new CorsConfiguration();

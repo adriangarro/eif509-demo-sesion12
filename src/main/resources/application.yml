@@ -1,0 +1,45 @@
+# Configuración común a todos los ambientes (Sesión 12, lámina 13).
+# Aquí no hay ningún valor secreto ni ninguna dirección de servidor: solo
+# nombres de variables de entorno con la sintaxis ${NOMBRE}. Lo que cambia
+# entre desarrollo y producción está en application-dev.yml y
+# application-prod.yml; el perfil se elige con SPRING_PROFILES_ACTIVE.
+spring:
+  profiles:
+    # Sin SPRING_PROFILES_ACTIVE (por ejemplo, ./gradlew bootRun en la
+    # computadora de cada quien) se usa el perfil dev.
+    default: dev
+  jpa:
+    # validate: Hibernate no crea tablas; valida que las entidades coincidan
+    # con el esquema que Flyway ya construyó (V1..V7).
+    hibernate:
+      ddl-auto: validate
+    # Criterio del curso: la entidad no cruza la frontera. Sin "open in view"
+    # no hay sesión de Hibernate en el controlador; el servicio devuelve DTOs
+    # ya mapeados dentro de su transacción.
+    open-in-view: false
+
+server:
+  # La plataforma asigna el puerto en la variable PORT y dirige el tráfico
+  # a ese puerto. Si la aplicación escuchara en un puerto fijo, la
+  # plataforma respondería 502. En local, sin la variable, queda 8080.
+  port: ${PORT:8080}
+
+# Sesión 11: el secreto que firma y verifica los tokens JWT (HS256, al menos
+# 32 caracteres). Se lee de la variable de entorno JWT_SECRETO y nunca se
+# escribe en el repositorio. Si falta, la aplicación no arranca.
+jwt:
+  secreto: ${JWT_SECRETO}
+
+# Orígenes que pueden llamar a la API desde un navegador (CORS). En
+# desarrollo, la SPA de React en Vite; en producción, el dominio real de la
+# SPA, en la variable CORS_ORIGEN de la plataforma.
+cors:
+  origenes: ${CORS_ORIGEN:http://localhost:5173}
+
+# OpenAPI / Swagger UI (springdoc). La especificación: /v3/api-docs
+# Solo documenta la API (/api/** y /auth/**): las vistas MVC no son parte del contrato.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  paths-to-match: /api/**,/auth/**

@@ -1,0 +1,5 @@
+# Perfil exclusivo para la demostración de la Sesión 11: no autoriza ningún
+# origen, para mostrar el error de CORS en la consola del navegador antes
+# de corregirlo. Se combina con dev: --spring.profiles.active=dev,sin-cors
+cors:
+  origenes: ""

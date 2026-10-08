@@ -1,0 +1,21 @@
+# Perfil prod: solo las diferencias respecto a application.yml. Se activa
+# con SPRING_PROFILES_ACTIVE=prod en la plataforma. Los valores de estas
+# variables viven únicamente en la configuración del servicio en la nube;
+# aquí, y en Git, solo están los nombres.
+spring:
+  datasource:
+    # Formato JDBC: jdbc:postgresql://host:5432/base. Si la plataforma entrega
+    # postgres://usuario:clave@host/base, hay que convertirla (ver README) y
+    # pasar el usuario y la clave en variables separadas.
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    show-sql: false
+
+# Los registros van a la salida estándar (factor «registros»): la
+# plataforma los recolecta y los muestra en su consola. Nada se escribe en
+# archivos del contenedor, que se pierden al reiniciarlo.
+logging:
+  level:
+    root: INFO
