@@ -163,6 +163,27 @@ En macOS con Homebrew, ejecuten en ambas terminales:
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 ```
 
+**Despertar el servicio en la nube.** Si ya tienen un servicio desplegado
+(el de respaldo), el plan gratuito lo suspende tras 15 minutos sin tráfico
+y tarda unos dos minutos en volver a arrancar. Para que responda al
+instante durante la Parte 2, abran una **tercera terminal** y dejen este
+bucle en ejecución durante toda la clase (una petición cada 5 minutos):
+
+```bash
+while true; do curl -s -o /dev/null -w "$(date +%H:%M:%S) -> %{http_code}\n" https://eif509-demo-sesion12.onrender.com/api/v1/productos; sleep 300; done
+```
+
+La primera línea puede tardar hasta dos minutos (el servicio está
+despertando); a partir de ahí cada línea muestra `401` de inmediato, que
+es la respuesta correcta sin token. Al terminar la clase, deténganlo con
+`Ctrl+C`. Si prefieren no dejar nada en ejecución, ejecuten una sola
+petición al menos dos minutos antes de llegar al paso 12 y repítanla si
+pasan más de 15 minutos sin usar la URL:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://eif509-demo-sesion12.onrender.com/api/v1/productos
+```
+
 ### Ejemplo: comandos en la computadora del profesor (macOS)
 
 Con el repositorio en `~/Documents/Claude/eif509-demo-sesion12`, los
@@ -191,6 +212,13 @@ Paso 8, en la terminal 2 (el secreto nuevo para la plataforma):
 
 ```bash
 openssl rand -base64 48
+```
+
+Antes de empezar, en una terminal 3 (mantiene despierto el servicio de
+respaldo durante la clase; se detiene con `Ctrl+C` al final):
+
+```bash
+while true; do curl -s -o /dev/null -w "$(date +%H:%M:%S) -> %{http_code}\n" https://eif509-demo-sesion12.onrender.com/api/v1/productos; sleep 300; done
 ```
 
 Al terminar:
@@ -293,9 +321,11 @@ servicio: Gradle compila, se construye la imagen, arranca Spring con el
 perfil `prod`, Flyway aplica las 7 migraciones sobre la base vacía y
 Tomcat escucha en el puerto 10000.
 
-**12. Probar la URL pública (paso 15).** Abran
-`https://eif509-demo-sesion12.onrender.com/swagger-ui.html` (también desde
-el teléfono). En la terminal 2, con su URL:
+**12. Probar la URL pública (paso 15).** Si el servicio lleva más de 15
+minutos sin tráfico, está suspendido: la primera petición tarda unos dos
+minutos (ver «Despertar el servicio en la nube» en «Antes de empezar»).
+Abran `https://eif509-demo-sesion12.onrender.com/swagger-ui.html` (también
+desde el teléfono). En la terminal 2, con su URL:
 
 ```bash
 API=https://eif509-demo-sesion12.onrender.com
@@ -334,10 +364,9 @@ base local:
 docker compose down -v
 ```
 
-El servicio en la nube queda en ejecución; en el plan gratuito se suspende
-tras 15 minutos sin tráfico y despierta con la siguiente petición (tarda
-uno o dos minutos). Antes de la clase, abran la URL pública para que el
-servicio ya esté despierto.
+Detengan con `Ctrl+C` el bucle de la terminal 3. El servicio en la nube
+queda en ejecución; en el plan gratuito se suspende tras 15 minutos sin
+tráfico y despierta con la siguiente petición (tarda uno o dos minutos).
 
 ## Instalación y configuración
 
@@ -705,8 +734,26 @@ causa (paso 9). La tabla de
 
 ### 15. Abrir la URL pública
 
-La URL está en la parte superior de la página del servicio. Abran
-`https://eif509-demo-sesion12.onrender.com/swagger-ui.html`: la misma
+La URL está en la parte superior de la página del servicio.
+
+**Antes de abrirla, verifiquen que el servicio esté despierto.** En el plan
+gratuito, tras 15 minutos sin tráfico la plataforma suspende el servicio y
+la siguiente petición lo vuelve a arrancar, lo que tarda alrededor de dos
+minutos (el navegador muestra una página de espera de Render mientras
+tanto). Para no esperar frente al grupo, ejecuten esto un par de minutos
+antes:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://eif509-demo-sesion12.onrender.com/api/v1/productos
+```
+
+Si responde `401` de inmediato, el servicio está despierto. Si la petición
+se queda esperando, está arrancando: en unos dos minutos responde `401` y
+desde ese momento todo es inmediato. Repítanlo si pasan más de 15 minutos
+sin usar la URL, o dejen el bucle de «Antes de empezar» en ejecución
+durante toda la clase.
+
+Abran `https://eif509-demo-sesion12.onrender.com/swagger-ui.html`: la misma
 documentación de la Sesión 9, ahora en internet y con HTTPS, que la
 plataforma gestiona. Pueden abrirla desde el teléfono.
 
@@ -814,6 +861,8 @@ con cero.
 | Construir la imagen | `docker build -t eif509-demo-sesion12 .` |
 | Ejecutar la imagen como la plataforma | El comando del paso 7 |
 | Generar un secreto JWT | `openssl rand -base64 48` |
+| Despertar el servicio en la nube (tarda hasta dos minutos si estaba suspendido) | `curl -s -o /dev/null -w "%{http_code}\n" https://eif509-demo-sesion12.onrender.com/api/v1/productos` |
+| Mantenerlo despierto durante la clase | El bucle de «Antes de empezar» |
 | Convertir la URL de la base a JDBC | El comando del paso 11 |
 | Ver qué contiene la imagen final | `docker run --rm --entrypoint ls eif509-demo-sesion12 -la /app` |
 | Swagger UI en local / en la nube | `http://localhost:8080/swagger-ui.html` / `https://<nombre>.onrender.com/swagger-ui.html` |
